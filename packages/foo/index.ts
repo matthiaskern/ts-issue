@@ -1,6 +1,3 @@
-import { Bar } from "../bar/index";
+import { getPerson } from "bar";
 
-export const bar: Bar = 1;
-
-export type Foo = string;
-export const foo: Foo = "";
+console.log(getPerson());

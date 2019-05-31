@@ -1,15 +1,17 @@
 {
-  "name": "ts-issue",
+  "name": "ts-issue-minimal-repo",
   "version": "1.0.0",
-  "description": "",
   "main": "index.js",
+  "private": true,
+  "license": "MIT",
   "scripts": {
     "test": "tsc compile.ts && node compile.js"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "dependencies": {
-    "typescript": "^3.5.1"
+  "workspaces": [
+    "packages/*"
+  ],
+  "devDependencies": {
+    "@types/node": "^12.0.2",
+    "typescript": "^3.4.5"
   }
 }

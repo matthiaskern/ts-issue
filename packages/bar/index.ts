@@ -1,3 +1,5 @@
-export const bar: Bar = 3;
+import { Person } from "./types";
 
-export type Bar = number;
+export function getPerson(): Person {
+  return { name: "David" };
+}

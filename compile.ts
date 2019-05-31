@@ -1,78 +1,99 @@
+import * as path from "path";
+import * as fs from "fs";
 import * as ts from "typescript";
 
-const compilerOptions = {
-  noEmitOnError: true,
-  include: "packages/foo"
-};
+function createInstance(options: ts.CompilerOptions) {
+  const files: ts.MapLike<{ version: number }> = {};
+  let projectVersion = 0;
 
-const filesA = [
-  "packages/foo/index.ts",
-  "packages/bar/index.ts",
-  "packages/bar/baz.ts"
-];
-
-const filesB = [
-  "packages/bar/index.ts",
-  "packages/bar/baz.ts",
-  "packages/foo/index.ts"
-];
-
-const prepareCompilation = (program: ts.Program) => (fileNames: string[]) => {
-  for (const filePath of fileNames) {
-    const sourceFile = program.getSourceFile(filePath);
-    if (sourceFile !== undefined) {
-      const emitResult = program.emit(sourceFile);
-      console.log({ emitResult });
-
-      console.log("\n\n");
-      console.log(
-        `Compilation ${
-          emitResult.emitSkipped ? "failed" : "worked"
-        } for ${filePath}!`
-      );
-
-      if (emitResult.emitSkipped) {
-        console.log("\n\n");
-        let sourceFiles = {
-          foo: program.getSourceFile("packages/foo/index.ts"),
-          bar: program.getSourceFile("packages/bar/index.ts"),
-          baz: program.getSourceFile("packages/bar/baz.ts")
-        };
-        console.log("\n\n");
-        console.log({ sourceFiles, program });
-        console.log("\n\n");
-        throw new Error("Found issue");
+  // Create the language service host to allow the LS to communicate with the host
+  const servicesHost: ts.LanguageServiceHost = {
+    getProjectVersion: () => {
+      console.log(`getProjectVersion`);
+      return `${projectVersion}`;
+    },
+    getScriptFileNames: () => {
+      return Object.keys(files);
+    },
+    getScriptVersion: fileName => {
+      console.log(`getScriptVersion`, fileName);
+      return files[fileName] && files[fileName].version.toString();
+    },
+    getScriptSnapshot: fileName => {
+      console.log(`getScriptSnapshot`, fileName);
+      if (!fs.existsSync(fileName)) {
+        return undefined;
       }
+      return ts.ScriptSnapshot.fromString(fs.readFileSync(fileName).toString());
+    },
+    getCurrentDirectory: () => {
+      console.log(`getCurrentDirectory`);
+
+      return process.cwd();
+    },
+    getCompilationSettings: () => {
+      console.log(`getCompilationSettings`);
+      return options;
+    },
+    getDefaultLibFileName: options => ts.getDefaultLibFilePath(options),
+    fileExists: ts.sys.fileExists,
+    readFile: ts.sys.readFile,
+    readDirectory: ts.sys.readDirectory
+  };
+
+  // Create the language service files
+  const services = ts.createLanguageService(
+    servicesHost,
+    ts.createDocumentRegistry()
+  );
+
+  //
+  // Add the file to the project or increment its version
+  //
+  function ensureSourceFile(fileName: string) {
+    let file = files[fileName];
+    if (file) {
+      file.version++;
+      projectVersion++;
+    } else {
+      file = { version: 0 };
+      files[fileName] = file;
     }
   }
 
-  let sourceFiles = {
-    foo: program.getSourceFile("packages/foo/index.ts"),
-    bar: program.getSourceFile("packages/bar/index.ts"),
-    baz: program.getSourceFile("packages/bar/baz.ts")
-  };
+  //
+  // Emit a file
+  //
+  function emitFile(fileName: string) {
+    ensureSourceFile(fileName);
 
-  console.log("\n\n");
-  console.log({ sourceFiles, program });
-  console.log("\n\n");
-};
+    let output = services.getEmitOutput(fileName);
 
-// variant 1
-let program = ts.createProgram(["/packages/bar"], compilerOptions);
+    if (!output.emitSkipped) {
+      console.log(`Emitting ${fileName}`);
+    } else {
+      console.log(`Emitting ${fileName} failed`);
+    }
 
-let compile = prepareCompilation(program);
+    output.outputFiles.forEach(o => {
+      console.log({
+        name: o.name,
+        text: o.text
+      });
+    });
+  }
 
-compile(filesA);
-compile(filesB);
+  return emitFile;
+}
 
-console.log("variant 1 worked");
+function works() {
+  const emitFile = createInstance({
+    module: ts.ModuleKind.CommonJS,
+    skipLibCheck: true,
+    suppressOutputPathCheck: true // This is why: https://github.com/Microsoft/TypeScript/issues/7363
+  });
+  emitFile(path.resolve(__dirname, "packages/foo/index.ts"));
+  emitFile(path.resolve(__dirname, "packages/bar/index.ts"));
+}
 
-// variant 2
-program = ts.createProgram(["./packages/foo"], compilerOptions);
-
-compile = prepareCompilation(program);
-
-compile(filesA);
-compile(filesB);
-
-console.log("variant 2 worked");
+works();
