@@ -1,34 +1,99 @@
+import * as path from "path";
+import * as fs from "fs";
 import * as ts from "typescript";
 
-let program = ts.createProgram();
+function createInstance(options: ts.CompilerOptions) {
+  const files: ts.MapLike<{ version: number }> = {};
+  let projectVersion = 0;
 
-const fooFile = program.getSourceFile("foo");
-const barFile = program.getSourceFile("bar");
+  // Create the language service host to allow the LS to communicate with the host
+  const servicesHost: ts.LanguageServiceHost = {
+    getProjectVersion: () => {
+      console.log(`getProjectVersion`);
+      return `${projectVersion}`;
+    },
+    getScriptFileNames: () => {
+      return Object.keys(files);
+    },
+    getScriptVersion: fileName => {
+      console.log(`getScriptVersion`, fileName);
+      return files[fileName] && files[fileName].version.toString();
+    },
+    getScriptSnapshot: fileName => {
+      console.log(`getScriptSnapshot`, fileName);
+      if (!fs.existsSync(fileName)) {
+        return undefined;
+      }
+      return ts.ScriptSnapshot.fromString(fs.readFileSync(fileName).toString());
+    },
+    getCurrentDirectory: () => {
+      console.log(`getCurrentDirectory`);
 
-console.log({ fooFile, barFile });
+      return process.cwd();
+    },
+    getCompilationSettings: () => {
+      console.log(`getCompilationSettings`);
+      return options;
+    },
+    getDefaultLibFileName: options => ts.getDefaultLibFilePath(options),
+    fileExists: ts.sys.fileExists,
+    readFile: ts.sys.readFile,
+    readDirectory: ts.sys.readDirectory
+  };
 
-// let emitResult = program.emit();
+  // Create the language service files
+  const services = ts.createLanguageService(
+    servicesHost,
+    ts.createDocumentRegistry()
+  );
 
-// let allDiagnostics = ts
-//   .getPreEmitDiagnostics(program)
-//   .concat(emitResult.diagnostics);
+  //
+  // Add the file to the project or increment its version
+  //
+  function ensureSourceFile(fileName: string) {
+    let file = files[fileName];
+    if (file) {
+      file.version++;
+      projectVersion++;
+    } else {
+      file = { version: 0 };
+      files[fileName] = file;
+    }
+  }
 
-// allDiagnostics.forEach(diagnostic => {
-//   if (diagnostic.file) {
-//     let { line, character } = diagnostic.file.getLineAndCharacterOfPosition(
-//       diagnostic.start!
-//     );
-//     let message = ts.flattenDiagnosticMessageText(diagnostic.messageText, "\n");
-//     console.log(
-//       `${diagnostic.file.fileName} (${line + 1},${character + 1}): ${message}`
-//     );
-//   } else {
-//     console.log(
-//       `${ts.flattenDiagnosticMessageText(diagnostic.messageText, "\n")}`
-//     );
-//   }
-// });
+  //
+  // Emit a file
+  //
+  function emitFile(fileName: string) {
+    ensureSourceFile(fileName);
 
-// let exitCode = emitResult.emitSkipped ? 1 : 0;
-// console.log(`Process exiting with code '${exitCode}'.`);
-// process.exit(exitCode);
+    let output = services.getEmitOutput(fileName);
+
+    if (!output.emitSkipped) {
+      console.log(`Emitting ${fileName}`);
+    } else {
+      console.log(`Emitting ${fileName} failed`);
+    }
+
+    output.outputFiles.forEach(o => {
+      console.log({
+        name: o.name,
+        text: o.text
+      });
+    });
+  }
+
+  return emitFile;
+}
+
+function works() {
+  const emitFile = createInstance({
+    module: ts.ModuleKind.CommonJS,
+    skipLibCheck: true,
+    suppressOutputPathCheck: true // This is why: https://github.com/Microsoft/TypeScript/issues/7363
+  });
+  emitFile(path.resolve(__dirname, "packages/foo/index.ts"));
+  emitFile(path.resolve(__dirname, "packages/bar/index.ts"));
+}
+
+works();
