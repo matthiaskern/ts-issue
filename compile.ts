@@ -17,10 +17,12 @@ function createInstance(options: ts.CompilerOptions) {
     },
     getScriptVersion: fileName => {
       console.log(`getScriptVersion`, fileName);
+      ensureSourceFile(fileName);
       return files[fileName] && files[fileName].version.toString();
     },
     getScriptSnapshot: fileName => {
       console.log(`getScriptSnapshot`, fileName);
+      ensureSourceFile(fileName);
       if (!fs.existsSync(fileName)) {
         return undefined;
       }
