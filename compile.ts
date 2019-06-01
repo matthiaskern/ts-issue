@@ -17,10 +17,10 @@ function createInstance(options: ts.CompilerOptions) {
     },
     getScriptVersion: fileName => {
       console.log(`getScriptVersion`, fileName);
-      ensureSourceFile(fileName);
       return files[fileName] && files[fileName].version.toString();
     },
     getScriptSnapshot: fileName => {
+      fileName = path.normalize(fileName);
       console.log(`getScriptSnapshot`, fileName);
       ensureSourceFile(fileName);
       if (!fs.existsSync(fileName)) {
@@ -40,7 +40,8 @@ function createInstance(options: ts.CompilerOptions) {
     getDefaultLibFileName: options => ts.getDefaultLibFilePath(options),
     fileExists: ts.sys.fileExists,
     readFile: ts.sys.readFile,
-    readDirectory: ts.sys.readDirectory
+    readDirectory: ts.sys.readDirectory,
+    realpath: ts.sys.realpath
   };
 
   // Create the language service files
@@ -54,10 +55,7 @@ function createInstance(options: ts.CompilerOptions) {
   //
   function ensureSourceFile(fileName: string) {
     let file = files[fileName];
-    if (file) {
-      file.version++;
-      projectVersion++;
-    } else {
+    if (file === undefined) {
       file = { version: 0 };
       files[fileName] = file;
     }
@@ -67,6 +65,8 @@ function createInstance(options: ts.CompilerOptions) {
   // Emit a file
   //
   function emitFile(fileName: string) {
+    console.log(`-----------------------------------------------`);
+
     ensureSourceFile(fileName);
 
     let output = services.getEmitOutput(fileName);
@@ -92,7 +92,7 @@ function works() {
   const emitFile = createInstance({
     module: ts.ModuleKind.CommonJS,
     skipLibCheck: true,
-    suppressOutputPathCheck: true // This is why: https://github.com/Microsoft/TypeScript/issues/7363
+    suppressOutputPathCheck: true
   });
   emitFile(path.resolve(__dirname, "packages/foo/index.ts"));
   emitFile(path.resolve(__dirname, "packages/bar/index.ts"));
